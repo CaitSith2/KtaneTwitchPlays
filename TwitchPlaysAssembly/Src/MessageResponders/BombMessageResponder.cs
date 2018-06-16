@@ -465,6 +465,7 @@ public class BombMessageResponder : MessageResponder
 
 	protected override void OnMessageReceived(string userNickName, string userColorCode, string text, bool whisper)
 	{
+		string whisperNick = whisper ? userNickName : null;
 		Match match;
 		int index;
 		if (!text.StartsWith("!") || text.Equals("!")) return;
@@ -476,7 +477,7 @@ public class BombMessageResponder : MessageResponder
 			{
 				string notes = match.Groups[2].Value;
 
-				IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.NotesTaken, index--, notes);
+				IRCConnection.Instance.SendBoth(whisperNick, TwitchPlaySettings.data.NotesTaken, index--, notes);
 
 				_notesDictionary[index] = notes;
 				moduleCameras?.SetNotes(index, notes);
@@ -487,7 +488,7 @@ public class BombMessageResponder : MessageResponder
 			{
 				string notes = match.Groups[2].Value;
 
-				IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.NotesAppended, index--, notes);
+				IRCConnection.Instance.SendBoth(whisperNick, TwitchPlaySettings.data.NotesAppended, index--, notes);
 				if (!_notesDictionary.ContainsKey(index))
 					_notesDictionary[index] = TwitchPlaySettings.data.NotesSpaceFree;
 
@@ -498,7 +499,7 @@ public class BombMessageResponder : MessageResponder
 
 			if (text.RegexMatch(out match, "^clearnotes(-?[0-9]+)$", "^notes(-?[0-9]+)clear$") && int.TryParse(match.Groups[1].Value, out index))
 			{
-				IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.NoteSlotCleared, index--);
+				IRCConnection.Instance.SendBoth(whisperNick, TwitchPlaySettings.data.NoteSlotCleared, index--);
 
 				_notesDictionary[index] = (OtherModes.ZenModeOn && index == 3) ? TwitchPlaySettings.data.ZenModeFreeSpace : TwitchPlaySettings.data.NotesSpaceFree;
 				moduleCameras?.SetNotes(index, _notesDictionary[index]);
@@ -536,10 +537,10 @@ public class BombMessageResponder : MessageResponder
 					string message = string.Format(TwitchPlaySettings.data.OwnedModuleList, userNickName, string.Join(", ", claimed.ToArray(), 0, Math.Min(claimed.Count, 5)));
 					if (claimed.Count > 5)
 						message += "...";
-					IRCConnection.Instance.SendMessage(message);
+					IRCConnection.Instance.SendWhisper(whisperNick, message);
 				}
 				else
-					IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.NoOwnedModules, userNickName);
+					IRCConnection.Instance.SendWhisper(whisperNick, TwitchPlaySettings.data.NoOwnedModules, userNickName);
 				return;
 			}
 
@@ -597,8 +598,8 @@ public class BombMessageResponder : MessageResponder
 				IEnumerable<string> unclaimed = ComponentHandles.Where(handle => !handle.Claimed && !handle.Solved && GameRoom.Instance.IsCurrentBomb(handle.bombID)).Shuffle().Take(3)
 					.Select(handle => string.Format($"{handle.HeaderText} ({handle.Code})")).ToList();
 
-				if (unclaimed.Any()) IRCConnection.Instance.SendMessage("Unclaimed Modules: {0}", unclaimed.Join(", "));
-				else IRCConnection.Instance.SendMessage("There are no more unclaimed modules.");
+				if (unclaimed.Any()) IRCConnection.Instance.SendWhisper(whisperNick, "Unclaimed Modules: {0}", unclaimed.Join(", "));
+				else IRCConnection.Instance.SendWhisper(whisperNick, "There are no more unclaimed modules.");
 
 				return;
 			}
@@ -608,8 +609,8 @@ public class BombMessageResponder : MessageResponder
 				IEnumerable<string> unsolved = ComponentHandles.Where(handle => !handle.Solved && GameRoom.Instance.IsCurrentBomb(handle.bombID)).Shuffle().Take(3)
 					.Select(handle => string.Format("{0} ({1}) - {2}", handle.HeaderText, handle.Code,
 					handle.PlayerName == null ? "Unclaimed" : "Claimed by " + handle.PlayerName)).ToList();
-				if (unsolved.Any()) IRCConnection.Instance.SendMessage("Unsolved Modules: {0}", unsolved.Join(", "));
-				else IRCConnection.Instance.SendMessage("There are no unsolved modules, something went wrong as this message should never be displayed."); //this should never happen
+				if (unsolved.Any()) IRCConnection.Instance.SendWhisper(whisperNick, "Unsolved Modules: {0}", unsolved.Join(", "));
+				else IRCConnection.Instance.SendWhisper(whisperNick, "There are no unsolved modules, something went wrong as this message should never be displayed."); //this should never happen
 
 				return;
 			}
@@ -627,8 +628,8 @@ public class BombMessageResponder : MessageResponder
 							handle.Solved ? "Solved" : (handle.PlayerName == null ? "Unclaimed" : "Claimed by " + handle.PlayerName)
 						)).ToList();
 
-					if (modules.Any()) IRCConnection.Instance.SendMessage("Modules: {0}", modules.Join(", "));
-					else IRCConnection.Instance.SendMessage($"Couldn't find any modules containing \"{trimmed}\".");
+					if (modules.Any()) IRCConnection.Instance.SendWhisper(whisperNick, "Modules: {0}", modules.Join(", "));
+					else IRCConnection.Instance.SendWhisper(whisperNick, $"Couldn't find any modules containing \"{trimmed}\".");
 				}
 
 				return;
@@ -646,10 +647,10 @@ public class BombMessageResponder : MessageResponder
 						.Select(handle => string.Format($"{handle.HeaderText} ({handle.Code}) - Claimed by {handle.PlayerName}")).ToList();
 					if (modules.Any())
 					{
-						if (playerModules.Any()) IRCConnection.Instance.SendMessage("Modules: {0}", playerModules.Join(", "));
-						else IRCConnection.Instance.SendMessage("None of the specified modules are claimed/have been solved.");
+						if (playerModules.Any()) IRCConnection.Instance.SendWhisper(whisperNick, "Modules: {0}", playerModules.Join(", "));
+						else IRCConnection.Instance.SendWhisper(whisperNick, "None of the specified modules are claimed/have been solved.");
 					}
-					else IRCConnection.Instance.SendMessage($"Could not find any modules containing \"{trimmed}\".");
+					else IRCConnection.Instance.SendWhisper(whisperNick, $"Could not find any modules containing \"{trimmed}\".");
 				}
 			}
 
@@ -667,7 +668,7 @@ public class BombMessageResponder : MessageResponder
 				if (unclaimed != null)
 					text = unclaimed.Code + (view ? " claimview" : " claim");
 				else
-					IRCConnection.Instance.SendMessage(string.Format("There are no more unclaimed{0} modules.", vanilla ? " vanilla" : modded ? " modded" : null));
+					IRCConnection.Instance.SendWhisper(whisperNick, string.Format("There are no more unclaimed{0} modules.", vanilla ? " vanilla" : modded ? " modded" : null));
 			}
 
 			if (text.RegexMatch(out match, "^(?:findsolved|solvedfind|searchsolved|solvedsearch) (.+)"))
@@ -683,10 +684,10 @@ public class BombMessageResponder : MessageResponder
 						.Select(handle => string.Format($"{handle.HeaderText} ({handle.Code}) - Claimed by {handle.PlayerName}", handle.HeaderText, handle.Code, "Claimed by " + handle.PlayerName)).ToList();
 					if (commanders.Any())
 					{
-						if (playerModules.Any()) IRCConnection.Instance.SendMessage("Modules: {0}", playerModules.Join(", "));
-						else IRCConnection.Instance.SendMessage("None of the specified modules have been solved.");
+						if (playerModules.Any()) IRCConnection.Instance.SendWhisper(whisperNick, "Modules: {0}", playerModules.Join(", "));
+						else IRCConnection.Instance.SendWhisper(whisperNick, "None of the specified modules have been solved.");
 					}
-					else IRCConnection.Instance.SendMessage($"Could not find any modules containing \"{trimmed}\".");
+					else IRCConnection.Instance.SendWhisper(whisperNick, $"Could not find any modules containing \"{trimmed}\".");
 				}
 			}
 
@@ -722,7 +723,7 @@ public class BombMessageResponder : MessageResponder
 					}
 					else failedQueries.Add(trimmed);
 				}
-				if (failedQueries.Count > 0) IRCConnection.Instance.SendMessage($"Couldn't find any modules containing \"{failedQueries.Join("\", \"")}\".");
+				if (failedQueries.Count > 0) IRCConnection.Instance.SendWhisper(whisperNick, $"Couldn't find any modules containing \"{failedQueries.Join("\", \"")}\".");
 
 				return;
 			}
@@ -748,7 +749,7 @@ public class BombMessageResponder : MessageResponder
 		{
 			if (!_notesDictionary.ContainsKey(index - 1))
 				_notesDictionary[index - 1] = TwitchPlaySettings.data.NotesSpaceFree;
-			IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.Notes, index, _notesDictionary[index - 1]);
+			IRCConnection.Instance.SendWhisper(whisperNick, TwitchPlaySettings.data.Notes, index, _notesDictionary[index - 1]);
 			return;
 		}
 
@@ -871,7 +872,7 @@ public class BombMessageResponder : MessageResponder
 		{
 			if (!GameRoom.Instance.IsCurrentBomb(componentHandle.bombID)) continue;
 			if (!text.StartsWith(componentHandle.Code + " ", StringComparison.InvariantCultureIgnoreCase)) continue;
-			IEnumerator onMessageReceived = componentHandle.OnMessageReceived(userNickName, userColorCode, text.Substring(componentHandle.Code.Length + 1));
+			IEnumerator onMessageReceived = componentHandle.OnMessageReceived(userNickName, userColorCode, text.Substring(componentHandle.Code.Length + 1), whisper);
 			if (onMessageReceived == null) continue;
 
 			if (_currentBomb != componentHandle.bombID)
@@ -886,7 +887,7 @@ public class BombMessageResponder : MessageResponder
 
 		if (TwitchPlaySettings.data.BombCustomMessages.ContainsKey(text.ToLowerInvariant()))
 		{
-			IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.BombCustomMessages[text.ToLowerInvariant()]);
+			IRCConnection.Instance.SendWhisper(whisperNick, TwitchPlaySettings.data.BombCustomMessages[text.ToLowerInvariant()]);
 		}
 	}
 

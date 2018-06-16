@@ -472,8 +472,9 @@ public class TwitchComponentHandle : MonoBehaviour
 	public static List<string> ClaimedList = new List<string>();
 
 	#region Message Interface
-	public IEnumerator OnMessageReceived(string userNickName, string userColor, string unprocessedCommand)
+	public IEnumerator OnMessageReceived(string userNickName, string userColor, string unprocessedCommand, bool whisper)
 	{
+		string whisperNick = whisper ? userNickName : null;
 		unprocessedCommand = unprocessedCommand.Trim();
 		string internalCommand = unprocessedCommand.ToLower().Trim();
 		string messageOut = null;
@@ -530,7 +531,7 @@ public class TwitchComponentHandle : MonoBehaviour
 					Tuple<bool, string> response = ClaimModule(userNickName, Code, true, internalCommand.Contains("p"));
 					if (response.First)
 					{
-						IRCConnection.Instance.SendMessage(response.Second);
+						IRCConnection.Instance.SendBoth(whisperNick, response.Second);
 						internalCommand = internalCommand.Contains("p") ? "view pin" : "view";
 					}
 					else
@@ -543,7 +544,7 @@ public class TwitchComponentHandle : MonoBehaviour
 					Tuple<bool, string> response = UnclaimModule(userNickName, Code);
 					if (response.First)
 					{
-						IRCConnection.Instance.SendMessage(response.Second);
+						IRCConnection.Instance.SendBoth(whisperNick, response.Second);
 						internalCommand = "unview";
 					}
 					else
@@ -644,7 +645,7 @@ public class TwitchComponentHandle : MonoBehaviour
 				}
 				else if (internalCommand.Equals("points", StringComparison.InvariantCultureIgnoreCase) || internalCommand.Equals("score", StringComparison.InvariantCultureIgnoreCase))
 				{
-					IRCConnection.Instance.SendMessage("{0} ({1}) Current score: {2}", HeaderText, Code, Solver.modInfo.moduleScore);
+					IRCConnection.Instance.SendWhisper(whisperNick, "{0} ({1}) Current score: {2}", HeaderText, Code, Solver.modInfo.moduleScore);
 
 					return null;
 				}
@@ -682,7 +683,7 @@ public class TwitchComponentHandle : MonoBehaviour
 
 			if (Solved)
 			{
-				IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.AlreadySolved, Code, PlayerName, userNickName, HeaderText);
+				IRCConnection.Instance.SendWhisper(whisperNick, TwitchPlaySettings.data.AlreadySolved, Code, PlayerName, userNickName, HeaderText);
 				return null;
 			}
 
@@ -695,7 +696,7 @@ public class TwitchComponentHandle : MonoBehaviour
 			moduleAlreadyClaimed &= !(internalCommand.Equals("solve", StringComparison.InvariantCultureIgnoreCase) && UserAccess.HasAccess(userNickName, AccessLevel.Admin, true));
 			if (moduleAlreadyClaimed)
 			{
-				IRCConnection.Instance.SendMessage(TwitchPlaySettings.data.AlreadyClaimed, Code, PlayerName, userNickName, HeaderText);
+				IRCConnection.Instance.SendWhisper(whisperNick, TwitchPlaySettings.data.AlreadyClaimed, Code, PlayerName, userNickName, HeaderText);
 				return null;
 			}
 
