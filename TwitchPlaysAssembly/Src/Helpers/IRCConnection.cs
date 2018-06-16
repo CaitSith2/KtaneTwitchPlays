@@ -15,24 +15,26 @@ using UnityEngine.Events;
 public class IRCConnection : MonoBehaviour
 {
 	#region Nested Types
-	public class MessageEvent : UnityEvent<string, string, string>
+	public class MessageEvent : UnityEvent<string, string, string, bool>
 	{
 	}
 
 	private class Message
 	{
-		public Message(string userNickName, string userColorCode, string text, bool internalMessage = false)
+		public Message(string userNickName, string userColorCode, string text, bool internalMessage = false, bool whisper = false)
 		{
 			UserNickName = userNickName;
 			UserColorCode = userColorCode;
 			Text = text;
 			Internal = internalMessage;
+			Whisper = whisper;
 		}
 
 		public readonly string UserNickName;
 		public readonly string UserColorCode;
 		public readonly string Text;
 		public readonly bool Internal;
+		public readonly bool Whisper;
 	}
 
 	private class Commands
@@ -131,7 +133,7 @@ public class IRCConnection : MonoBehaviour
 			{
 				Message message = _messageQueue.Dequeue();
 				if(!message.Internal)
-					OnMessageReceived.Invoke(message.UserNickName, message.UserColorCode, message.Text);
+					OnMessageReceived.Invoke(message.UserNickName, message.UserColorCode, message.Text, message.Whisper);
 				InternalMessageReceived(message.UserNickName, message.UserColorCode, message.Text);
 			}
 		}
@@ -252,7 +254,7 @@ public class IRCConnection : MonoBehaviour
 				}
 			}
 			while (_state == IRCConnectionState.Connected) yield return new WaitForSeconds(0.1f);
-			if(BombMessageResponder.BombActive) BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall");
+			if(BombMessageResponder.BombActive) BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall", false);
 			switch (_state)
 			{
 				case IRCConnectionState.DoNotRetry:
@@ -431,7 +433,7 @@ public class IRCConnection : MonoBehaviour
 	public void Disconnect()
 	{
 		SetDebugUsername(true);
-		if (BombMessageResponder.BombActive) BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall");
+		if (BombMessageResponder.BombActive) BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall", false);
 		// ReSharper disable once SwitchStatementMissingSomeCases
 		switch (_state)
 		{
@@ -454,12 +456,12 @@ public class IRCConnection : MonoBehaviour
 	}
 
 	[StringFormatMethod("message")]
-	public new void SendMessage(string message)
+	private void SendMessageInternal(string message, string whisper)
 	{
 		foreach (string line in message.Wrap(MaxMessageLength).Split(new[] {"\n"}, StringSplitOptions.RemoveEmptyEntries))
 		{
 			if (!_silenceMode && _state != IRCConnectionState.Disconnected)
-				SendCommand(string.Format("PRIVMSG #{0} :{1}", _settings.channelName, line));
+				SendCommand($"PRIVMSG #{_settings.channelName} :{(!string.IsNullOrEmpty(whisper) ? $"/w {whisper} {line}" : line)}");
 			if (line.StartsWith(".") || line.StartsWith("/")) continue;
 			lock (_messageQueue)
 			{
@@ -471,7 +473,21 @@ public class IRCConnection : MonoBehaviour
 	[StringFormatMethod("message")]
 	public void SendMessage(string message, params object[] args)
 	{
-		SendMessage(string.Format(message, args));
+		SendMessageInternal(string.Format(message, args), null);
+	}
+
+	[StringFormatMethod("message")]
+	public void SendWhisper(string whisper, string message, params object[] args)
+	{
+		SendMessageInternal(string.Format(message, args), whisper);
+	}
+
+	[StringFormatMethod("message")]
+	public void SendBoth(string whisper, string message, params object[] args)
+	{
+		SendMessageInternal(string.Format(message, args), whisper);
+		if(!string.IsNullOrEmpty(whisper))
+			SendMessageInternal(string.Format(message, args), null);
 	}
 
 	public void ToggleSilenceMode()
@@ -522,7 +538,7 @@ public class IRCConnection : MonoBehaviour
 		}
 	}
 
-	private void ReceiveMessage(string userNickName, string userColorCode, string text)
+	private void ReceiveMessage(string userNickName, string userColorCode, string text, bool whisper = false)
 	{
 		if (ColorUtility.TryParseHtmlString(userColorCode, out Color color))
 		{
@@ -551,7 +567,7 @@ public class IRCConnection : MonoBehaviour
 
 		lock (_messageQueue)
 		{
-			_messageQueue.Enqueue(new Message(userNickName, userColorCode, text));
+			_messageQueue.Enqueue(new Message(userNickName, userColorCode, text, false, whisper));
 		}
 	}
 
@@ -739,14 +755,8 @@ public class IRCConnection : MonoBehaviour
 	{
 		new ActionMap(@"color=(#[0-9A-F]{6})?;display-name=([^;]+)?;.+:(\S+)!\S+ PRIVMSG #(\S+) :(.+)", delegate(GroupCollection groups)
 		{
-			if (!string.IsNullOrEmpty(groups[2].Value))
-			{
-				Instance.ReceiveMessage(groups[2].Value, groups[1].Value, groups[5].Value);
-			}
-			else
-			{
-				Instance.ReceiveMessage(groups[3].Value, groups[1].Value, groups[5].Value);
-			}
+			string fromNick = !string.IsNullOrEmpty(groups[2].Value) ? groups[2].Value : groups[3].Value;
+			Instance.ReceiveMessage(fromNick, groups[1].Value, groups[5].Value);
 		}),
 
 		new ActionMap(@"badges=([^;]+)?;color=(#[0-9A-F]{6})?;display-name=([^;]+)?;emote-sets=\S+ :\S+ USERSTATE #(.+)", delegate(GroupCollection groups)
@@ -754,11 +764,34 @@ public class IRCConnection : MonoBehaviour
 			Instance.CurrentColor = string.IsNullOrEmpty(groups[2].Value) ? string.Empty : groups[2].Value;
 			Instance.SetDelay(groups[1].Value, groups[3].Value, groups[4].Value);
 			Instance.SetOwnColor();
-		}, false), 
+		}, false),
+
+		new ActionMap(@"color=(#[0-9A-F]{6})?;display-name=([^;]+)?;.+:(\S+)!\S+ WHISPER (\S+) :(.+)", delegate(GroupCollection groups)
+		{
+			string fromNick = !string.IsNullOrEmpty(groups[2].Value) ? groups[2].Value : groups[3].Value;
+			if(UserAccess.HasAccess(fromNick, AccessLevel.Defuser, true))
+				Instance.ReceiveMessage(fromNick, groups[1].Value, groups[5].Value, true);
+			else
+			{
+				Instance.SendWhisper(fromNick, "Please send your commands to the main channel.");
+				AddTextToHoldable(groups[0].Value);
+			}
+		}),
 
 		new ActionMap(@":(\S+)!\S+ PRIVMSG #(\S+) :(.+)", delegate(GroupCollection groups)
 		{
 			Instance.ReceiveMessage(groups[1].Value, null, groups[3].Value);
+		}),
+
+		new ActionMap(@":(\S+)!\S+ WHISPER #(\S+) :(.+)", delegate(GroupCollection groups)
+		{
+			if(UserAccess.HasAccess(groups[1].Value, AccessLevel.Defuser, true))
+				Instance.ReceiveMessage(groups[1].Value, null, groups[3].Value, true);
+			else
+			{
+				Instance.SendWhisper(groups[1].Value, "Please send your commands to the main channel.");
+				AddTextToHoldable(groups[0].Value);
+			}
 		}),
 
 		new ActionMap(@"PING (.+)", delegate(GroupCollection groups)

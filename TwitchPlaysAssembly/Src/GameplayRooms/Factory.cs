@@ -122,13 +122,13 @@ public class Factory : GameRoom
 			IRCConnection.Instance.SendMessage("Bomb {0} of {1} is now live.", currentBombID++ , _infiniteMode ? "∞" : BombCount.ToString());
 			if (OtherModes.ZenModeOn && IRCConnection.Instance.State == IRCConnectionState.Connected && TwitchPlaySettings.data.EnableFactoryZenModeCameraWall)
 			{
-				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!enablecamerawall");
-				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!modules");
-				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!modules");
+				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!enablecamerawall", false);
+				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!modules", false);
+				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!modules", false);
 			}
 			else
 			{
-				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall");
+				BombMessageResponder.Instance.OnMessageReceived("Bomb Factory", "!disablecamerawall", false);
 			}
 
 			if (TwitchPlaySettings.data.EnableAutomaticEdgework)

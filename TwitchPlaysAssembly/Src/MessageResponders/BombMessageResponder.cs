@@ -458,12 +458,12 @@ public class BombMessageResponder : MessageResponder
 		CreateComponentHandlesForBomb(bomb);
 	}
 
-	public void OnMessageReceived(string userNickName, string text)
+	public void OnMessageReceived(string userNickName, string text, bool whisper)
 	{
-		OnMessageReceived(userNickName, null, text);
+		OnMessageReceived(userNickName, null, text, whisper);
 	}
 
-	protected override void OnMessageReceived(string userNickName, string userColorCode, string text)
+	protected override void OnMessageReceived(string userNickName, string userColorCode, string text, bool whisper)
 	{
 		Match match;
 		int index;
@@ -521,7 +521,7 @@ public class BombMessageResponder : MessageResponder
 
 			if (text.RegexMatch(out match, "^claims (.+)"))
 			{
-				OnMessageReceived(match.Groups[1].Value, userColorCode, "!claims");
+				OnMessageReceived(match.Groups[1].Value, userColorCode, "!claims", whisper);
 				return;
 			}
 

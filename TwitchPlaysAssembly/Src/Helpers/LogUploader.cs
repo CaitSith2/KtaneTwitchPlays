@@ -169,7 +169,7 @@ public class LogUploader : MonoBehaviour
 		yield break;
 	}
 
-	public bool PostToChat(string format = "Analysis for this bomb: {0}", string emote = "copyThis")
+	public bool PostToChat(string format = "Analysis for this bomb: {0}", string emote = "copyThis", string whisperNick = null)
 	{
 		if (string.IsNullOrEmpty(analysisUrl))
 		{
@@ -178,7 +178,7 @@ public class LogUploader : MonoBehaviour
 		}
 		Debug.Log(LOGPREFIX + "Posting analysis URL to chat");
 		emote = " " + emote + " ";
-		IRCConnection.Instance.SendMessage(emote + format, analysisUrl);
+		IRCConnection.Instance.SendWhisper(whisperNick, emote + format, analysisUrl);
 		return true;
 	}
 
